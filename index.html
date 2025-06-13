@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hub de Projetos com Gantt</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { /* Variáveis de Cor */
+            --cor-fundo: #f8f9fa; --cor-coluna: #ffffff; --cor-borda-geral: #dee2e6;
+            --cor-texto: #212529; --cor-sombra: rgba(0, 0, 0, 0.05); --cor-sidebar: #e9ecef;
+            --cor-primaria: #007bff; --cor-primaria-hover: #0056b3; --cor-destaque: #fff3cd;
+        }
+        body, html { height: 100%; margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: var(--cor-fundo); color: var(--cor-texto); }
+        .app-container { display: flex; height: 100vh; }
+        .sidebar { width: 80px; background-color: var(--cor-sidebar); padding: 20px 0; display: flex; justify-content: center; align-items: flex-start; flex-shrink: 0; }
+        #btn-add-item-sidebar { width: 50px; height: 50px; background-color: var(--cor-primaria); color: white; border: none; border-radius: 50%; font-size: 2em; font-weight: 300; line-height: 50px; text-align: center; cursor: pointer; transition: background-color 0.2s, transform 0.2s; margin-top: 10px; }
+        .content-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        #project-manager { 
+            padding: 10px 20px; background-color: #fff; border-bottom: 1px solid var(--cor-borda-geral); 
+            display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-shrink: 0; flex-wrap: wrap;
+        }
+        .project-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        #project-manager select, #project-manager button { padding: 8px 12px; border: 1px solid var(--cor-borda-geral); border-radius: 6px; font-size: 0.9em; }
+        #project-manager button { background-color: #28a745; color: white; cursor: pointer; border-color: #28a745; }
+        #project-manager button:hover { opacity: 0.85; }
+        #btn-novo-projeto { background-color: #6c757d; border-color: #6c757d; }
+        #btn-excluir-projeto { background-color: #dc3545; border-color: #dc3545; }
+        #btn-exportar-projeto, #btn-salvar-template, #btn-carregar-template { background-color: #17a2b8; border-color: #17a2b8; }
+
+
+        .header-views .tab-button {
+            padding: 8px 12px; border: 1px solid transparent; background-color: transparent; border-radius: 6px; font-size: 0.9em; cursor: pointer;
+        }
+        .header-views .tab-button.active {
+             background-color: var(--cor-primaria); color: white; font-weight: 600; 
+        }
+        .header-views .tab-button:not(.active):hover { background-color: #e9ecef; }
+
+
+        .main-view-area { flex-grow: 1; overflow: auto; position: relative; padding: 0 20px; }
+        .view-container { display: none; height: 100%; width: 100%; flex-direction: column;}
+        .view-container.active { display: flex; }
+
+        #titulo-container { text-align: center; padding: 15px 0 10px 0; flex-shrink: 0; }
+        #quadro-titulo-geral { font-size: 1.8em; font-weight: 600; padding: 5px 15px; cursor: text; white-space: nowrap; margin:0; }
+
+        #quadro-principal { display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px; padding: 10px 0 20px 0; overflow-x: auto; flex-grow: 1; align-content: start; }
+        .coluna { background-color: var(--cor-coluna); border-radius: 8px; border: 1px solid var(--cor-borda-geral); box-shadow: 0 2px 5px var(--cor-sombra); padding: 15px; display: flex; flex-direction: column; border-left-width: 5px; border-left-style: solid; min-height: 350px; cursor: grab; }
+        .coluna.dragging { opacity: 0.5; border: 2px dashed #007bff; cursor: grabbing; }
+
+        .coluna-header { flex-wrap: wrap; display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--cor-borda-geral); }
+        .coluna-number { font-size: 1.2em; font-weight: 600; color: var(--cor-borda-geral); margin-right: 8px; }
+        .coluna-titulo { font-size: 1.1em; font-weight: 600; flex-grow: 1; }
+        .color-picker-wrapper { position: relative; width: 24px; height: 24px; margin-left: 8px; }
+        .color-picker-wrapper input[type="color"] { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .color-picker-wrapper .color-display { width: 100%; height: 100%; border-radius: 50%; border: 1px solid #ccc; }
+
+        .gantt-inputs { display: flex; gap: 5px; width: 100%; margin-top: 15px; }
+        .gantt-inputs input { width: 50%; border: 1px solid #ddd; border-radius: 4px; font-size: 0.8em; padding: 6px; box-sizing: border-box; }
+
+        .cartoes-container { flex-grow: 1; min-height: 50px; }
+        .cartao {
+            background-color: #fff; border-radius: 6px; padding: 10px; margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e9ecef;
+            position: relative; word-wrap: break-word; cursor: grab;
+        }
+        .cartao.dragging { opacity: 0.5; }
+        .cartoes-container.drag-over { border: 2px dashed #ccc; background-color: #f8f9fa; }
+
+        .cartao .btn-excluir {
+            position: absolute; top: 2px; right: 2px; display: none;
+            background: transparent; border: none; color: #aaa; font-size: 1.4em; cursor: pointer;
+            padding: 0 5px; line-height: 1;
+        }
+        .cartao:hover .btn-excluir { display: block; }
+        .cartao:hover .btn-excluir:hover { color: #dc3545; }
+        
+        #premissas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; padding: 20px 0; overflow-y: auto; flex-grow: 1; align-content: start; }
+        .premissa-card { background-color: var(--cor-coluna); border-radius: 8px; border: 1px solid var(--cor-borda-geral); box-shadow: 0 2px 5px var(--cor-sombra); padding: 15px; display: flex; flex-direction: column; border-left-width: 5px; border-left-style: solid; }
+        .premissa-card-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--cor-borda-geral); }
+        .premissa-card h3 { font-size: 1.1em; font-weight: 600; margin: 0; }
+        .premissa-card ul { list-style: none; padding: 0; margin: 0 0 15px 0; flex-grow: 1; }
+        .premissa-card li { padding: 8px 5px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+        .premissa-card li:last-child { border-bottom: none; }
+        .premissa-card .editable-content { flex-grow: 1; }
+        .btn-excluir { background: transparent; border: none; color: #aaa; font-size: 1.4em; cursor: pointer; padding: 0 5px; line-height: 1; margin-left: 10px; }
+        .btn-excluir:hover { color: #dc3545; }
+
+        .premissa-card .btn-add-item, .coluna .btn-add-cartao {
+            background-color: #e9ecef; border: 1px dashed #ced4da; color: #495057; padding: 10px;
+            cursor: pointer; border-radius: 6px; text-align: center; margin-top: auto;
+            transition: background-color 0.2s;
+        }
+        .premissa-card .btn-add-item:hover, .coluna .btn-add-cartao:hover { background-color: #dee2e6; }
+        
+        #gantt-view, #financeiro-view { overflow: auto; }
+        .gantt-container { display: grid; grid-template-columns: 250px 1fr; min-width: 1800px; }
+        .gantt-labels { border-right: 2px solid var(--cor-borda-geral); }
+        .gantt-labels .gantt-header-label, .gantt-labels .gantt-task-label { height: 40px; display: flex; align-items: center; padding: 0 10px; font-weight: 600; border-bottom: 1px solid #eee; }
+        .gantt-labels .gantt-task-label { font-weight: normal; }
+        .gantt-timeline { display: grid; grid-template-columns: repeat(20, 1fr); }
+        .gantt-timeline .gantt-week { height: 40px; text-align: center; line-height: 40px; font-weight: 600; border-bottom: 2px solid var(--cor-borda-geral); border-right: 1px dotted #ccc; }
+        .gantt-rows { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(20, 1fr); }
+        .gantt-row { height: 40px; border-bottom: 1px solid #eee; grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; box-sizing: border-box; }
+        .gantt-bar { grid-row: 1; background-color: var(--cor-primaria); color: white; border-radius: 4px; margin: 5px; display: flex; align-items: center; justify-content: center; font-size: 0.9em; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; height: 30px; }
+
+        /* Classe para esconder elementos durante a exportação */
+        .hide-on-export {
+            display: none !important;
+        }
+        
+        /* Estilos da Gestão Financeira */
+        .financeiro-container { padding: 20px; display: flex; flex-direction: column; gap: 30px; }
+        .financeiro-section { background-color: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px var(--cor-sombra); }
+        .financeiro-section h3 { margin: 0 0 15px 0; font-size: 1.3em; border-bottom: 1px solid var(--cor-borda-geral); padding-bottom: 10px; }
+        .profissional-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 15px; align-items: end;}
+        .fase-custo-form { display: flex; gap: 10px; margin-bottom: 15px; }
+        .profissional-form input, .fase-custo-form input, .fase-custo-form select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .financeiro-table { width: 100%; border-collapse: collapse; margin-bottom: 20px;}
+        .financeiro-table th, .financeiro-table td { padding: 12px; border: 1px solid var(--cor-borda-geral); text-align: left; }
+        .financeiro-table th { background-color: #f8f9fa; }
+        .resumo-financeiro { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .resumo-item { background-color: #f8f9fa; padding: 15px; border-radius: 6px; }
+        .resumo-item h4 { margin: 0 0 5px 0; font-size: 1em; color: #6c757d; }
+        .resumo-item p { margin: 0; font-size: 1.5em; font-weight: bold; }
+        .charts-container { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: center;}
+
+        /* Estilos do Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); width: 90%; max-width: 400px; }
+        .modal-title { font-size: 1.4em; font-weight: 600; margin: 0 0 15px 0; }
+        .modal-body { margin-bottom: 20px; }
+        .modal-body p { margin: 0 0 10px 0; }
+        .modal-body input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--cor-borda-geral); box-sizing: border-box; }
+        .modal-footer { text-align: right; }
+        .modal-footer button { padding: 10px 18px; border-radius: 6px; border: none; cursor: pointer; margin-left: 10px; font-weight: 500; }
+        .modal-btn-primary { background-color: var(--cor-primaria); color: white; }
+        .modal-btn-secondary { background-color: #6c757d; color: white; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <button id="btn-add-item-sidebar" title="Adicionar Nova Coluna">+</button>
+        </div>
+        <div class="content-wrapper">
+            <div id="project-manager">
+                <div class="project-controls"></div>
+                <div class="header-views"></div>
+            </div>
+            <div id="titulo-container"><h1 id="quadro-titulo-geral" contenteditable="true"></h1></div>
+            <div class="main-view-area">
+                <div id="quadro-view" class="view-container active"><div id="quadro-principal"></div></div>
+                <div id="premissas-view" class="view-container"><div id="premissas-grid"></div></div>
+                <div id="gantt-view" class="view-container">
+                    <div class="gantt-container">
+                        <div class="gantt-labels">
+                            <div class="gantt-header-label">Entregas Principais</div>
+                        </div>
+                        <div class="gantt-timeline"></div>
+                    </div>
+                </div>
+                <div id="financeiro-view" class="view-container"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="app-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="modal-title" class="modal-title">Título</h2>
+            <div id="modal-body" class="modal-body">
+                <p id="modal-message"></p>
+                <input type="text" id="modal-input" style="display: none;">
+            </div>
+            <div id="modal-footer" class="modal-footer">
+                <button id="modal-btn-cancel" class="modal-btn-secondary">Cancelar</button>
+                <button id="modal-btn-confirm" class="modal-btn-primary">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const getEl = (id) => document.getElementById(id);
+        const ui_elements = {
+            quadroPrincipal: getEl('quadro-principal'),
+            btnAddItemSidebar: getEl('btn-add-item-sidebar'),
+            tituloGeral: getEl('quadro-titulo-geral'),
+            projectManager: { 
+                container: getEl('project-manager'),
+                controls: getEl('project-manager').querySelector('.project-controls'),
+                views: getEl('project-manager').querySelector('.header-views')
+            },
+            views: document.querySelectorAll('.view-container'),
+            premissasGrid: getEl('premissas-grid'),
+            financeiroView: getEl('financeiro-view'),
+            gantt: {
+                labels: getEl('gantt-view').querySelector('.gantt-labels'),
+                timeline: getEl('gantt-view').querySelector('.gantt-timeline'),
+            },
+            modal: {
+                overlay: getEl('app-modal'),
+                title: getEl('modal-title'),
+                message: getEl('modal-message'),
+                input: getEl('modal-input'),
+                btnConfirm: getEl('modal-btn-confirm'),
+                btnCancel: getEl('modal-btn-cancel'),
+            }
+        };
+        const columnColors = ['#28a745', '#17a2b8', '#dc3545', '#6f42c1', '#fd7e14', '#20c997', '#6610f2', '#e83e8c'];
+        
+        let draggedCard = null;
+        let financialData = {
+            professionals: [],
+            phaseCosts: {}
+        };
+        let costByProfChart = null;
+        let revenueCostByPhaseChart = null;
+
+        function initLayout() {
+            const pm = ui_elements.projectManager;
+            pm.controls.innerHTML = `
+                <button id="btn-salvar-projeto">Salvar</button>
+                <select id="project-selector"></select>
+                <button id="btn-carregar-projeto">Carregar</button>
+                <button id="btn-novo-projeto">Novo Projeto</button>
+                <button id="btn-excluir-projeto">Excluir</button>
+                <button id="btn-exportar-projeto">Exportar Imagem</button>
+                <button id="btn-salvar-template">Salvar Template</button>
+                <button id="btn-carregar-template">Carregar Template</button>
+                `;
+            
+            pm.views.innerHTML = `
+                <button class="tab-button active" data-view="quadro-view">Quadro</button>
+                <button class="tab-button" data-view="premissas-view">Premissas</button>
+                <button class="tab-button" data-view="gantt-view">Gantt</button>
+                <button class="tab-button" data-view="financeiro-view">Gestão Financeira</button>`;
+
+            pm.btnSalvar = getEl("btn-salvar-projeto");
+            pm.btnCarregar = getEl("btn-carregar-projeto");
+            pm.btnNovo = getEl("btn-novo-projeto");
+            pm.btnExcluir = getEl("btn-excluir-projeto");
+            pm.btnExportar = getEl("btn-exportar-projeto");
+            pm.selector = getEl("project-selector");
+            pm.tabs = pm.views.querySelectorAll('.tab-button');
+            // NOVO
+            pm.btnSalvarTemplate = getEl("btn-salvar-template");
+            pm.btnCarregarTemplate = getEl("btn-carregar-template");
+
+
+            pm.btnSalvar.addEventListener("click", saveCurrentProject);
+            pm.btnCarregar.addEventListener("click", loadSelectedProject);
+            pm.btnNovo.addEventListener("click", newProject);
+            pm.btnExcluir.addEventListener("click", deleteSelectedProject);
+            pm.btnExportar.addEventListener("click", exportViewAsPNG);
+            
+            // NOVO
+            pm.btnSalvarTemplate.addEventListener('click', saveProjectAsJson);
+            pm.btnCarregarTemplate.addEventListener('click', loadProjectFromJson);
+            
+            setupTabListeners();
+            setupDragAndDropListeners();
+        }
+        
+        let modalResolve;
+        function showModal({ title, message = '', showInput = false, confirmText = 'Confirmar', cancelText = 'Cancelar' }) {
+            const { modal } = ui_elements;
+            modal.title.textContent = title;
+            modal.message.textContent = message;
+            modal.input.style.display = showInput ? 'block' : 'none';
+            modal.input.value = '';
+            modal.btnConfirm.textContent = confirmText;
+            modal.btnCancel.textContent = cancelText;
+            modal.overlay.style.display = 'flex';
+            
+            return new Promise(resolve => {
+                modalResolve = resolve;
+            });
+        }
+        
+        ui_elements.modal.btnConfirm.addEventListener('click', () => {
+            if (modalResolve) {
+                const value = ui_elements.modal.input.style.display === 'block' ? ui_elements.modal.input.value : true;
+                modalResolve(value);
+            }
+            ui_elements.modal.overlay.style.display = 'none';
+        });
+
+        ui_elements.modal.btnCancel.addEventListener('click', () => {
+            if (modalResolve) modalResolve(null);
+            ui_elements.modal.overlay.style.display = 'none';
+        });
+
+        function getProjectIndex() { return JSON.parse(localStorage.getItem('kanbanProjectsIndex_v16')) || []; }
+        function saveProjectIndex(index) { localStorage.setItem('kanbanProjectsIndex_v16', JSON.stringify(index)); }
+        
+        async function saveCurrentProject() {
+            const projectName = await showModal({
+                title: 'Salvar Projeto',
+                message: 'Digite um nome para o projeto:',
+                showInput: true,
+                confirmText: 'Salvar'
+            });
+
+            if (!projectName || !projectName.trim()) return;
+            const projectId = `proj_${Date.now()}`;
+            const projectData = getProjectData();
+            localStorage.setItem(projectId, JSON.stringify(projectData));
+            const index = getProjectIndex();
+            index.push({ id: projectId, name: projectName });
+            saveProjectIndex(index);
+            
+            showModal({ title: 'Sucesso', message: `Projeto "${projectName}" salvo!`, confirmText: 'OK', cancelText: '' });
+
+            populateProjectList();
+            ui_elements.projectManager.selector.value = projectId;
+        }
+
+        async function deleteSelectedProject() {
+            const { selector } = ui_elements.projectManager;
+            const projectId = selector.value;
+            if (!projectId) return;
+            const projectName = selector.options?.[selector.selectedIndex]?.textContent || '';
+            
+            const confirmed = await showModal({
+                title: 'Excluir Projeto',
+                message: `Tem certeza que deseja excluir o projeto "${projectName}"? Esta ação não pode ser desfeita.`,
+                confirmText: 'Excluir'
+            });
+
+            if (confirmed) {
+                localStorage.removeItem(projectId);
+                saveProjectIndex(getProjectIndex().filter(p => p.id !== projectId));
+                populateProjectList();
+                newProject();
+            }
+        }
+        
+        async function exportViewAsPNG() {
+            const activeView = document.querySelector('.view-container.active > div');
+            if (!activeView) return;
+
+            const elementsToHide = activeView.id === 'quadro-principal'
+                ? activeView.querySelectorAll('.btn-add-cartao, .gantt-inputs')
+                : [];
+            elementsToHide.forEach(el => el.classList.add('hide-on-export'));
+            
+            await showModal({
+                title: "Exportando Imagem",
+                message: "A preparar a imagem para download. Por favor, aguarde...",
+                confirmText: "OK",
+                cancelText: ""
+            });
+
+            html2canvas(activeView, {
+                allowTaint: true,
+                useCORS: true,
+                scrollX: 0,
+                scrollY: 0,
+                windowWidth: activeView.scrollWidth,
+                windowHeight: activeView.scrollHeight
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `${ui_elements.tituloGeral.textContent.trim()}_${activeView.id}.png`;
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+                ui_elements.modal.overlay.style.display = 'none';
+            }).catch(err => {
+                 showModal({ title: "Erro", message: "Ocorreu um erro ao exportar a imagem.", confirmText: "OK", cancelText: ""});
+            }).finally(() => {
+                elementsToHide.forEach(el => el.classList.remove('hide-on-export'));
+            });
+        }
+        
+        // NOVO: Função para salvar o projeto como um arquivo JSON
+        function saveProjectAsJson() {
+            const projectData = getProjectData();
+            const jsonString = JSON.stringify(projectData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            const fileName = `${ui_elements.tituloGeral.textContent.trim().replace(/\s+/g, '_') || 'projeto'}_backup.json`;
+            link.download = fileName;
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // NOVO: Função para carregar um projeto de um arquivo JSON
+        function loadProjectFromJson() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json,application/json';
+            
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = event => {
+                    try {
+                        const projectData = JSON.parse(event.target.result);
+                        // Validação básica para garantir que é um arquivo de projeto válido
+                        if (projectData.tituloGeral && projectData.quadro) {
+                            renderProject(projectData);
+                            showModal({ title: "Sucesso", message: "Projeto carregado a partir do arquivo!", confirmText: "OK", cancelText: "" });
+                        } else {
+                            throw new Error("Formato de arquivo inválido.");
+                        }
+                    } catch (error) {
+                        showModal({ title: "Erro", message: `Não foi possível carregar o arquivo. Verifique se é um backup válido. (${error.message})`, confirmText: "OK", cancelText: "" });
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            input.click();
+        }
+
+        function getProjectData() {
+            const quadroData = {
+                colunas: Array.from(ui_elements.quadroPrincipal.querySelectorAll('.coluna')).map(el => ({
+                    id: el.dataset.id || `col_${Date.now()}`,
+                    titulo: el.querySelector('.coluna-titulo').innerHTML,
+                    cor: el.style.borderLeftColor,
+                    cartoes: Array.from(el.querySelectorAll('.cartao .editable-content')).map(c => c.innerHTML),
+                    gantt: {
+                        inicio: el.querySelector('.gantt-input-inicio')?.value || '',
+                        duracao: el.querySelector('.gantt-input-duracao')?.value || ''
+                    }
+                }))
+            };
+            const premissasData = {
+                cards: Array.from(ui_elements.premissasGrid.querySelectorAll('.premissa-card')).map(el => ({
+                    titulo: el.querySelector('h3').innerHTML,
+                    cor: el.style.borderLeftColor,
+                    itens: Array.from(el.querySelectorAll('.editable-content')).map(i => i.innerHTML)
+                }))
+            };
+            return {
+                tituloGeral: ui_elements.tituloGeral.innerHTML,
+                quadro: quadroData,
+                premissas: premissasData,
+                financeiro: financialData
+            };
+        }
+
+        function renderProject(data) {
+            ui_elements.tituloGeral.innerHTML = data.tituloGeral || "Meu Projeto";
+            
+            ui_elements.quadroPrincipal.innerHTML = '';
+            (data.quadro?.colunas || []).forEach((colunaData, index) => ui_elements.quadroPrincipal.appendChild(criarColuna(colunaData, index)));
+            
+            ui_elements.premissasGrid.innerHTML = '';
+            (data.premissas?.cards || getDefaultPremissas()).forEach(d => ui_elements.premissasGrid.appendChild(criarPremissaCard(d.titulo, d.cor, d.itens)));
+            
+            financialData = data.financeiro || { professionals: [], phaseCosts: {} };
+            
+            const activeTab = ui_elements.projectManager.views.querySelector('.tab-button.active');
+            if (activeTab) {
+                const viewId = activeTab.dataset.view;
+                if (viewId === 'gantt-view') {
+                    renderGantt(data.quadro?.colunas || []);
+                } else if (viewId === 'financeiro-view') {
+                    renderFinanceiro();
+                }
+            }
+        }
+        
+        function criarColuna(colunaData, index) {
+            const { id, titulo, cor, cartoes = [], gantt = { inicio: '', duracao: '' } } = colunaData;
+            const el = document.createElement('div');
+            el.className = 'coluna';
+            el.dataset.id = id;
+            el.style.borderLeftColor = cor;
+            el.setAttribute('draggable', 'true');
+            el.innerHTML = `
+                <div class="coluna-header">
+                    <span class="coluna-number">${index + 1}</span>
+                    <h2 class="coluna-titulo" contenteditable="true">${titulo}</h2>
+                    <div class="color-picker-wrapper">
+                         <div class="color-display" style="background-color: ${cor};"></div>
+                         <input type="color" value="${cor}">
+                    </div>
+                    <button class="btn-excluir">×</button>
+                </div>
+                <div class="cartoes-container"></div>
+                <button class="btn-add-cartao">+ Adicionar Item</button>
+                <div class="gantt-inputs">
+                    <input type="number" class="gantt-input-inicio" placeholder="Início (S)" value="${gantt.inicio || ''}">
+                    <input type="number" class="gantt-input-duracao" placeholder="Duração (S)" value="${gantt.duracao || ''}">
+                </div>`;
+            
+            const colorInput = el.querySelector('input[type="color"]');
+            const colorDisplay = el.querySelector('.color-display');
+
+            const autoUpdateViews = () => {
+                const activeTab = ui_elements.projectManager.views.querySelector('.tab-button.active');
+                if (activeTab) {
+                    const viewId = activeTab.dataset.view;
+                    if (viewId === 'gantt-view') {
+                        renderGantt(getProjectData().quadro.colunas);
+                    } else if (viewId === 'financeiro-view') {
+                        renderFinanceiro();
+                    }
+                }
+            };
+            
+            colorInput.addEventListener('input', (e) => {
+                const newColor = e.target.value;
+                el.style.borderLeftColor = newColor;
+                colorDisplay.style.backgroundColor = newColor;
+                autoUpdateViews();
+            });
+
+            el.querySelector('.coluna-titulo').addEventListener('blur', autoUpdateViews);
+            el.querySelector('.btn-excluir').addEventListener('click', () => { el.remove(); updateColumnNumbers(); autoUpdateViews(); });
+            el.querySelector('.gantt-input-inicio').addEventListener('change', autoUpdateViews);
+            el.querySelector('.gantt-input-duracao').addEventListener('change', autoUpdateViews);
+
+            const cartoesContainer = el.querySelector('.cartoes-container');
+            cartoes.forEach(cartaoHTML => cartoesContainer.appendChild(criarCartao(cartaoHTML)));
+            el.querySelector('.btn-add-cartao').addEventListener('click', () => {
+                const newCard = criarCartao("Novo item...");
+                cartoesContainer.appendChild(newCard);
+                const contentDiv = newCard.querySelector('[contenteditable="true"]');
+                if(contentDiv) { contentDiv.focus(); document.execCommand('selectAll', false, null); }
+            });
+            return el;
+        }
+
+        // --- GESTÃO FINANCEIRA ---
+        function renderFinanceiro() {
+            const container = ui_elements.financeiroView;
+            container.innerHTML = `<div class="financeiro-container">
+                <div class="financeiro-section">
+                    <h3>Profissionais e Custos</h3>
+                    <div class="profissional-form">
+                        <input type="text" id="prof-nome" placeholder="Nome do Profissional">
+                        <input type="number" id="prof-custo" placeholder="Custo/Hora Venda (R$)">
+                        <input type="number" id="prof-custo-real" placeholder="Custo/Hora Real (R$)">
+                        <button id="add-prof-btn" class="modal-btn-primary">Adicionar</button>
+                    </div>
+                    <table id="prof-table" class="financeiro-table">
+                        <thead><tr><th>Profissional</th><th>Custo/Hora Venda</th><th>Custo/Hora Real</th><th>Ações</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="financeiro-section">
+                     <h3>Gráficos</h3>
+                     <div class="charts-container">
+                        <canvas id="cost-by-prof-chart"></canvas>
+                        <canvas id="revenue-cost-by-phase-chart"></canvas>
+                     </div>
+                </div>
+                <div class="financeiro-section">
+                    <h3>Custos por Fase</h3>
+                     <div id="fases-custo-container"></div>
+                </div>
+                 <div class="financeiro-section">
+                    <h3>Resumo Financeiro</h3>
+                    <div class="resumo-financeiro">
+                        <div class="resumo-item"><h4>Receita Total</h4><p id="total-receita">R$ 0,00</p></div>
+                        <div class="resumo-item"><h4>Custo Interno Total</h4><p id="total-custo-interno">R$ 0,00</p></div>
+                        <div class="resumo-item"><h4>Lucro</h4><p id="total-lucro">R$ 0,00</p></div>
+                        <div class="resumo-item"><h4>Margem</h4><p id="total-margem">0.00%</p></div>
+                    </div>
+                    <button id="btn-export-excel" class="modal-btn-primary" style="margin-top: 15px;">Exportar para Excel</button>
+                </div>
+            </div>`;
+
+            const addProfBtn = getEl('add-prof-btn');
+            const profTableBody = getEl('prof-table').querySelector('tbody');
+            const fasesCustoContainer = getEl('fases-custo-container');
+
+            function updateProfissionais() {
+                profTableBody.innerHTML = '';
+                financialData.professionals.forEach((prof, index) => {
+                    const row = profTableBody.insertRow();
+                    row.innerHTML = `
+                        <td>${prof.name}</td>
+                        <td>R$ ${parseFloat(prof.cost).toFixed(2)}</td>
+                        <td>R$ ${parseFloat(prof.costPrice).toFixed(2)}</td>
+                        <td><button data-index="${index}" class="btn-excluir">×</button></td>
+                    `;
+                    row.querySelector('.btn-excluir').addEventListener('click', () => {
+                        financialData.professionals.splice(index, 1);
+                        updateAll();
+                    });
+                });
+            }
+
+            function updateFasesCusto() {
+                fasesCustoContainer.innerHTML = '';
+                const { colunas } = getProjectData().quadro;
+                colunas.forEach(fase => {
+                    const faseId = fase.id;
+                    if (!financialData.phaseCosts[faseId]) {
+                        financialData.phaseCosts[faseId] = {};
+                    }
+
+                    const faseDiv = document.createElement('div');
+                    faseDiv.innerHTML = `<h4>${fase.titulo.replace(/<[^>]*>/g, "")}</h4>`;
+                    
+                    financialData.professionals.forEach(prof => {
+                        const profId = prof.name.replace(/\s+/g, '-');
+                        const horas = financialData.phaseCosts[faseId][profId] || 0;
+                        faseDiv.innerHTML += `
+                            <div class="fase-custo-form">
+                                <label>${prof.name}:</label>
+                                <input type="number" data-fase-id="${faseId}" data-prof-id="${profId}" value="${horas}" placeholder="Horas">
+                            </div>
+                        `;
+                    });
+                    fasesCustoContainer.appendChild(faseDiv);
+                });
+
+                fasesCustoContainer.querySelectorAll('input').forEach(input => {
+                    input.addEventListener('change', (e) => {
+                        const { faseId, profId } = e.target.dataset;
+                        financialData.phaseCosts[faseId][profId] = parseFloat(e.target.value) || 0;
+                        updateAll();
+                    });
+                });
+            }
+
+            function updateFinancialSummary() {
+                let totalRevenue = 0;
+                let totalInternalCost = 0;
+
+                for (const faseId in financialData.phaseCosts) {
+                    const faseCusto = financialData.phaseCosts[faseId];
+                    for (const profId in faseCusto) {
+                        const professional = financialData.professionals.find(p => p.name.replace(/\s+/g, '-') === profId);
+                        if (professional) {
+                            const hours = faseCusto[profId];
+                            totalRevenue += hours * professional.cost;
+                            totalInternalCost += hours * professional.costPrice;
+                        }
+                    }
+                }
+
+                const profit = totalRevenue - totalInternalCost;
+                const margin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
+                getEl('total-receita').textContent = `R$ ${totalRevenue.toFixed(2)}`;
+                getEl('total-custo-interno').textContent = `R$ ${totalInternalCost.toFixed(2)}`;
+                getEl('total-lucro').textContent = `R$ ${profit.toFixed(2)}`;
+                getEl('total-margem').textContent = `${margin.toFixed(2)}%`;
+            }
+            
+            function renderFinancialCharts() {
+                // Chart 1: Custo por Profissional (Donut)
+                const profCosts = financialData.professionals.map(prof => {
+                    let totalHours = 0;
+                    for (const faseId in financialData.phaseCosts) {
+                        const profId = prof.name.replace(/\s+/g, '-');
+                        totalHours += financialData.phaseCosts[faseId][profId] || 0;
+                    }
+                    return totalHours * prof.cost;
+                });
+
+                if(costByProfChart) costByProfChart.destroy();
+                costByProfChart = new Chart(getEl('cost-by-prof-chart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: financialData.professionals.map(p => p.name),
+                        datasets: [{
+                            data: profCosts,
+                            backgroundColor: columnColors,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'top' },
+                            title: { display: true, text: 'Distribuição de Receita por Profissional' }
+                        }
+                    },
+                });
+
+                // Chart 2: Receita vs Custo por Fase (Bar)
+                const { colunas } = getProjectData().quadro;
+                const phaseLabels = colunas.map(f => f.titulo.replace(/<[^>]*>/g, ""));
+                const phaseRevenues = colunas.map(f => {
+                    let revenue = 0;
+                    const faseCustos = financialData.phaseCosts[f.id] || {};
+                    for(const profId in faseCustos) {
+                        const professional = financialData.professionals.find(p => p.name.replace(/\s+/g, '-') === profId);
+                        if(professional) revenue += faseCustos[profId] * professional.cost;
+                    }
+                    return revenue;
+                });
+                const phaseInternalCosts = colunas.map(f => {
+                    let cost = 0;
+                    const faseCustos = financialData.phaseCosts[f.id] || {};
+                    for(const profId in faseCustos) {
+                        const professional = financialData.professionals.find(p => p.name.replace(/\s+/g, '-') === profId);
+                        if(professional) cost += faseCustos[profId] * professional.costPrice;
+                    }
+                    return cost;
+                });
+                
+                if(revenueCostByPhaseChart) revenueCostByPhaseChart.destroy();
+                revenueCostByPhaseChart = new Chart(getEl('revenue-cost-by-phase-chart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: phaseLabels,
+                        datasets: [
+                            { label: 'Receita', data: phaseRevenues, backgroundColor: 'rgba(0, 123, 255, 0.7)' },
+                            { label: 'Custo Interno', data: phaseInternalCosts, backgroundColor: 'rgba(220, 53, 69, 0.7)' }
+                        ]
+                    },
+                     options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'top' },
+                            title: { display: true, text: 'Receita vs. Custo por Fase' }
+                        },
+                        scales: { y: { beginAtZero: true } }
+                    },
+                });
+            }
+
+            function updateAll() {
+                updateProfissionais();
+                updateFasesCusto();
+                updateFinancialSummary();
+                renderFinancialCharts();
+            }
+
+            addProfBtn.addEventListener('click', () => {
+                const nome = getEl('prof-nome').value.trim();
+                const custo = parseFloat(getEl('prof-custo').value);
+                const custoReal = parseFloat(getEl('prof-custo-real').value);
+                if (nome && custo > 0 && custoReal >= 0) {
+                    financialData.professionals.push({ name: nome, cost: custo, costPrice: custoReal });
+                    getEl('prof-nome').value = '';
+                    getEl('prof-custo').value = '';
+                    getEl('prof-custo-real').value = '';
+                    updateAll();
+                }
+            });
+
+            getEl('btn-export-excel').addEventListener('click', exportFinancialDataToExcel);
+
+            updateAll();
+        }
+
+        function exportFinancialDataToExcel() {
+            const wb = XLSX.utils.book_new();
+            
+            // Folha 1: Dados detalhados
+            const { colunas } = getProjectData().quadro;
+            let detailedData = [["Fase", "Profissional", "Horas", "Custo/Hora Venda", "Custo/Hora Real", "Receita Atividade", "Custo Interno Atividade", "Lucro Atividade"]];
+            
+            let totalRevenue = 0;
+            let totalInternalCost = 0;
+
+            colunas.forEach(fase => {
+                const faseId = fase.id;
+                let faseRevenue = 0;
+                let faseInternalCost = 0;
+                
+                if (financialData.phaseCosts[faseId]) {
+                    for (const profId in financialData.phaseCosts[faseId]) {
+                        const professional = financialData.professionals.find(p => p.name.replace(/\s+/g, '-') === profId);
+                        if (professional) {
+                            const horas = financialData.phaseCosts[faseId][profId];
+                            const atividadeRevenue = horas * professional.cost;
+                            const atividadeInternalCost = horas * professional.costPrice;
+                            const atividadeProfit = atividadeRevenue - atividadeInternalCost;
+                            
+                            faseRevenue += atividadeRevenue;
+                            faseInternalCost += atividadeInternalCost;
+
+                            detailedData.push([
+                                fase.titulo.replace(/<[^>]*>/g, ""),
+                                professional.name,
+                                horas,
+                                professional.cost.toFixed(2),
+                                professional.costPrice.toFixed(2),
+                                atividadeRevenue.toFixed(2),
+                                atividadeInternalCost.toFixed(2),
+                                atividadeProfit.toFixed(2)
+                            ]);
+                        }
+                    }
+                }
+                detailedData.push(["", "", "", "", "", "Subtotal Fase:", faseRevenue.toFixed(2), faseInternalCost.toFixed(2), (faseRevenue - faseInternalCost).toFixed(2)]);
+                detailedData.push([]); // Linha em branco
+                totalRevenue += faseRevenue;
+                totalInternalCost += faseInternalCost;
+            });
+            
+            const totalProfit = totalRevenue - totalInternalCost;
+            const totalMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
+            detailedData.push([]);
+            detailedData.push(["", "", "", "", "", "RECEITA TOTAL:", totalRevenue.toFixed(2)]);
+            detailedData.push(["", "", "", "", "", "CUSTO INTERNO TOTAL:", totalInternalCost.toFixed(2)]);
+            detailedData.push(["", "", "", "", "", "LUCRO TOTAL:", totalProfit.toFixed(2)]);
+            detailedData.push(["", "", "", "", "", "MARGEM TOTAL:", `${totalMargin.toFixed(2)}%`]);
+
+            const wsDetailed = XLSX.utils.aoa_to_sheet(detailedData);
+            XLSX.utils.book_append_sheet(wb, wsDetailed, "Financeiro Detalhado");
+
+            // Folha 2: Resumo para gráficos
+            let summaryData = [["Dados para Gráficos"]];
+            summaryData.push([]);
+            summaryData.push(["Distribuição de Receita por Profissional"]);
+            summaryData.push(["Profissional", "Receita Total"]);
+             financialData.professionals.forEach(prof => {
+                let totalHours = 0;
+                for (const faseId in financialData.phaseCosts) {
+                    const profId = prof.name.replace(/\s+/g, '-');
+                    totalHours += financialData.phaseCosts[faseId][profId] || 0;
+                }
+                summaryData.push([prof.name, (totalHours * prof.cost).toFixed(2)]);
+            });
+
+            summaryData.push([]);
+            summaryData.push(["Receita vs Custo por Fase"]);
+            summaryData.push(["Fase", "Receita", "Custo Interno"]);
+            colunas.forEach(f => {
+                let revenue = 0;
+                let cost = 0;
+                const faseCustos = financialData.phaseCosts[f.id] || {};
+                for(const profId in faseCustos) {
+                    const professional = financialData.professionals.find(p => p.name.replace(/\s+/g, '-') === profId);
+                    if(professional) {
+                         revenue += faseCustos[profId] * professional.cost;
+                         cost += faseCustos[profId] * professional.costPrice;
+                    }
+                }
+                summaryData.push([f.titulo.replace(/<[^>]*>/g, ""), revenue.toFixed(2), cost.toFixed(2)]);
+            });
+            const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+            XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo Gráficos");
+
+
+            XLSX.writeFile(wb, `${ui_elements.tituloGeral.textContent.trim()}_Financeiro.xlsx`);
+        }
+        
+        // --- FUNÇÕES DE RENDERIZAÇÃO E EVENTOS ---
+        function loadSelectedProject() {
+            const projectId = ui_elements.projectManager.selector.value;
+            if (!projectId) return;
+            const projectData = JSON.parse(localStorage.getItem(projectId));
+            if (projectData) renderProject(projectData);
+        }
+        function newProject() {
+            renderProject({
+                tituloGeral: "Novo Projeto",
+                quadro: { colunas: [] },
+                premissas: { cards: getDefaultPremissas() },
+                financeiro: { professionals: [], phaseCosts: {} }
+            });
+        }
+        function updateColumnNumbers() {
+            const colunas = ui_elements.quadroPrincipal.querySelectorAll('.coluna');
+            colunas.forEach((coluna, index) => {
+                let numberEl = coluna.querySelector('.coluna-number');
+                if (numberEl) {
+                    numberEl.textContent = index + 1;
+                }
+            });
+        }
+        function criarCartao(htmlContent) {
+            const el = document.createElement('div');
+            el.className = 'cartao';
+            el.setAttribute('draggable', 'true');
+            // NOVO: Garantir que o conteúdo do cartão seja apenas o texto editável
+            const cleanContent = htmlContent.replace(/<button class="btn-excluir".*?<\/button>/gi, '').replace('<div contenteditable="true">', '').replace('</div>', '');
+            el.innerHTML = `<div contenteditable="true">${cleanContent}</div><button class="btn-excluir">&times;</button>`;
+            el.addEventListener('dragstart', () => {
+                draggedCard = el;
+                setTimeout(() => el.classList.add('dragging'), 0);
+            });
+            el.addEventListener('dragend', () => {
+                if(draggedCard) draggedCard.classList.remove('dragging');
+                draggedCard = null;
+            });
+            el.querySelector('.btn-excluir').addEventListener('click', (e) => { e.stopPropagation(); el.remove(); });
+            return el;
+        }
+        function criarPremissaCard(titulo, cor, itens = []) {
+            const el = document.createElement('div'); el.className = 'premissa-card';
+            el.style.borderLeftColor = cor;
+            el.innerHTML = `<div class="premissa-card-header"><h3 contenteditable="true">${titulo}</h3><button class="btn-excluir">×</button></div><ul></ul><button class="btn-add-item">+ Adicionar Item</button>`;
+            el.querySelector('.btn-excluir').addEventListener('click', () => el.remove());
+            const ul = el.querySelector('ul');
+            itens.forEach(itemHTML => ul.appendChild(criarItemPremissa(itemHTML)));
+            el.querySelector('.btn-add-item').addEventListener('click', () => {
+                 const newItem = criarItemPremissa("Novo item"); ul.appendChild(newItem);
+                 const contentSpan = newItem.querySelector('.editable-content');
+                 if(contentSpan) { contentSpan.focus(); document.execCommand('selectAll', false, null); }
+            });
+            return el;
+        }
+        function criarItemPremissa(htmlContent) {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="editable-content" contenteditable="true">${htmlContent}</span><button class="btn-excluir">&times;</button>`;
+            li.querySelector('.btn-excluir').addEventListener('click', () => li.remove());
+            return li;
+        }
+        function getDefaultPremissas() {
+            return [
+                { titulo: "Horário de Atendimento", cor: columnColors[0], itens: ["Execução em dias úteis (seg-sex)", "<strong>9h às 18h (Brasília)</strong>"] },
+                { titulo: "Acessos e Ambientes", cor: columnColors[1], itens: ["<strong>Acesso admin M365</strong>", "Acesso remoto controlado"] },
+                { titulo: "Licenciamento", cor: columnColors[2], itens: ["<strong>Cliente responsável</strong> por licenças"] }
+            ];
+        }
+        function renderGantt(colunasData) {
+            const { labels, timeline } = ui_elements.gantt;
+            labels.innerHTML = '<div class="gantt-header-label">Entregas Principais</div>';
+            timeline.innerHTML = '';
+            for (let i = 1; i <= 20; i++) {
+                const weekEl = document.createElement('div');
+                weekEl.className = 'gantt-week'; weekEl.textContent = `S${i}`; timeline.appendChild(weekEl);
+            }
+            const ganttRows = document.createElement('div');
+            ganttRows.className = 'gantt-rows'; timeline.appendChild(ganttRows);
+            colunasData.forEach((coluna, index) => {
+                const labelEl = document.createElement('div');
+                labelEl.className = 'gantt-task-label';
+                const cleanTitle = coluna.titulo.replace(/<[^>]*>/g, "");
+                labelEl.innerHTML = `<span style="display:inline-block; width:25px; font-weight:bold; color:${coluna.cor}; text-align:right; margin-right:5px;">${index + 1}</span> ${cleanTitle}`;
+                labels.appendChild(labelEl);
+                const rowBg = document.createElement('div'); rowBg.className = 'gantt-row'; ganttRows.appendChild(rowBg);
+                const inicio = parseInt(coluna.gantt.inicio, 10);
+                const duracao = parseInt(coluna.gantt.duracao, 10);
+                if (inicio > 0 && duracao > 0 && inicio <= 20) {
+                    const bar = document.createElement('div');
+                    bar.className = 'gantt-bar'; bar.textContent = cleanTitle;
+                    bar.style.backgroundColor = coluna.cor;
+                    bar.style.gridColumn = `${inicio} / span ${Math.min(duracao, 21 - inicio)}`;
+                    rowBg.appendChild(bar);
+                }
+            });
+        }
+        function setupTabListeners() {
+             ui_elements.projectManager.tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    ui_elements.projectManager.tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const targetViewId = tab.dataset.view;
+                    ui_elements.views.forEach(view => view.classList.toggle('active', view.id === targetViewId));
+                    ui_elements.btnAddItemSidebar.style.display = 'block';
+
+                    if (targetViewId === 'gantt-view') {
+                        renderGantt(getProjectData().quadro.colunas);
+                        ui_elements.btnAddItemSidebar.style.display = 'none';
+                    } else if (targetViewId === 'financeiro-view') {
+                        renderFinanceiro();
+                        ui_elements.btnAddItemSidebar.style.display = 'none';
+                    } else if (targetViewId === 'quadro-view') {
+                        ui_elements.btnAddItemSidebar.title = 'Adicionar Nova Coluna';
+                    } else {
+                        ui_elements.btnAddItemSidebar.title = 'Adicionar Bloco de Premissa';
+                    }
+                });
+            });
+        }
+        function setupDragAndDropListeners() {
+            const quadro = ui_elements.quadroPrincipal;
+            quadro.addEventListener('dragstart', e => {
+                if (e.target.classList.contains('coluna')) { e.target.classList.add('dragging'); }
+            });
+            quadro.addEventListener('dragend', e => {
+                if (e.target.classList.contains('coluna')) {
+                    e.target.classList.remove('dragging');
+                    setTimeout(() => {
+                        updateColumnNumbers();
+                        const activeTab = ui_elements.projectManager.views.querySelector('.tab-button.active');
+                        if (activeTab && activeTab.dataset.view === 'gantt-view') {
+                            renderGantt(getProjectData().quadro.colunas);
+                        }
+                    }, 0);
+                }
+            });
+            quadro.addEventListener('dragover', e => {
+                e.preventDefault();
+                const draggingColuna = quadro.querySelector('.coluna.dragging');
+                if (!draggingColuna) return;
+                const afterElement = getDragAfterElement(quadro, e.clientX);
+                if (afterElement == null) {
+                    quadro.appendChild(draggingColuna);
+                } else {
+                    quadro.insertBefore(draggingColuna, afterElement);
+                }
+            });
+            document.addEventListener('dragover', e => {
+                const container = e.target.closest('.cartoes-container');
+                if (container) { e.preventDefault(); container.classList.add('drag-over'); }
+            });
+            document.addEventListener('dragleave', e => {
+                const container = e.target.closest('.cartoes-container');
+                 if (container) { container.classList.remove('drag-over'); }
+            });
+            document.addEventListener('drop', e => {
+                const container = e.target.closest('.cartoes-container');
+                if (container && draggedCard) {
+                    e.preventDefault(); container.appendChild(draggedCard); container.classList.remove('drag-over');
+                }
+            });
+        }
+        function getDragAfterElement(container, x) {
+            const draggableElements = [...container.querySelectorAll('.coluna:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = x - box.left - box.width / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else { return closest; }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+        populateProjectList = function() {
+            const projects = getProjectIndex();
+            const selector = ui_elements.projectManager.selector;
+            selector.innerHTML = '';
+            if (projects.length === 0) {
+                selector.innerHTML = '<option value="">Nenhum projeto salvo</option>'; return;
+            }
+            projects.forEach(proj => {
+                const option = document.createElement('option');
+                option.value = proj.id; option.textContent = proj.name; selector.appendChild(option);
+            });
+        }
+        ui_elements.btnAddItemSidebar.addEventListener('click', () => {
+            if (getEl('quadro-view').classList.contains('active')) {
+                const newIndex = ui_elements.quadroPrincipal.children.length;
+                const nextColor = columnColors[newIndex % columnColors.length];
+                ui_elements.quadroPrincipal.appendChild(criarColuna({ id: `col_${Date.now()}`, titulo: "Nova Etapa", cor: nextColor, }, newIndex));
+            } else if (getEl('premissas-view').classList.contains('active')) {
+                const nextColor = columnColors[ui_elements.premissasGrid.children.length % columnColors.length];
+                ui_elements.premissasGrid.appendChild(criarPremissaCard("Nova Premissa", nextColor, ["Novo item"]));
+            }
+        });
+
+        initLayout();
+        populateProjectList();
+        if (getProjectIndex().length > 0 && ui_elements.projectManager.selector.value) {
+            loadSelectedProject();
+        } else {
+            newProject();
+        }
+    });
+    </script>
+</body>
+</html>
